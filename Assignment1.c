@@ -8,17 +8,22 @@
 #include <fcntl.h>
 #include <signal.h>
 
+// ==== NODE STRUCTURE
 struct node {
   int number;
   int pid;
   struct node *next;
 };
 
+
+// ==== GLOBAL VARIABLES
 struct node *head_job = NULL;
 struct node *current_job = NULL;
 struct node *copy_head_job = NULL;
 pid_t current_fg_job_pid;
 
+
+//
 int getcmd(char *line, char *args[], int *background, int *output_redirect)
 {
 	int i = 0;
@@ -108,9 +113,32 @@ void redirect_output(char *args[]) {
   }
 }
 
-void myexecvp(char *args[], int *output_redirect) {
-  if (output_redirect == 0) {execvp(args[0], args);}
-  else {redirect_output(args); execvp(args[0], args);}
+int myexecvp(char *args[], int *output_redirect) {
+  int result = 0;
+  if (output_redirect == 0) { result = execvp(args[0], args);}
+  else {redirect_output(args); result = execvp(args[0], args);}
+
+  return result;
+}
+
+void execute_with_fork(char *args[], int *bg, int *output_redirect, int *current_fg_job_pid){
+  pid_t  pid;
+  pid = fork();
+  if (pid == -1) {
+    printf("Forking was unsuccessful..\n");
+  }
+  else if (pid == 0) {
+    myexecvp(args, output_redirect);
+  }
+  else {
+    if (*bg == 1) {
+        addToJobList(args, pid);
+    } else {
+      *current_fg_job_pid = pid;
+    }
+    int status;
+    waitpid(pid, &status, WUNTRACED);
+  }
 }
 
 // This function handles Signals
@@ -120,7 +148,6 @@ void sighandler(int signal)
     // Ignore Ctrl+Z
     }
     else if (signal == SIGINT) {
-        printf("Killing foreground job...\n");
         kill(current_fg_job_pid, SIGKILL);
       }
 }
@@ -134,8 +161,7 @@ int main(void) {
   ////////////////////
 
 	char *args[20];
-	int bg;
-  int output_redirect;
+	int bg, output_redirect;
 
 	while (1) {
 
@@ -143,7 +169,7 @@ int main(void) {
 		clean_arguments(args);
     copy_head_job = head_job;
 		bg = 0;
-    output_redirect=0;
+    output_redirect = 0;
 		int length = 0;
 		char *line = NULL;
 		size_t linecap = 0; // 16 bit unsigned integer
@@ -165,131 +191,111 @@ int main(void) {
 
 		int cnt  = getcmd(line, args, &bg, &output_redirect);
 
-// Command LS
-		if (!strcmp("ls", args[0])) { // returns 0 if they are equal , then we negate to make the if statment true
+    if (cnt != 0) {
 
-			pid_t  pid;// this is just a type def for int really..
-			pid = fork();
-			if (pid == 0) {
-        myexecvp(args, &output_redirect);
+      // Command LS
+  		if (!strcmp("ls", args[0])) {
+        execute_with_fork(args, &bg, &output_redirect, &current_fg_job_pid);
+  		}
+      // Command CAT
+      else if (!strcmp("cat", args[0])) {
+        execute_with_fork(args, &bg, &output_redirect, &current_fg_job_pid);
       }
-			else {
-        if (bg == 1) {
-            addToJobList(args, pid);
-        } else {
-          current_fg_job_pid = pid;
-        }
-				int status;
-				waitpid(pid, &status, WUNTRACED);
-			}
 
-		}
-
-// Command CD
-		else if (!strcmp("cd", args[0])) {
-
-			int result = 0;
-			if (args[1] == NULL) { // this will fetch home directory if you just input "cd" with no arguments
-				char *home = getenv("HOME");
-				if (home != NULL) {
-					result = chdir(home);
-				}
-				else {
-					printf("cd: No $HOME variable declared in the environment");
-				}
-			}
-			//Otherwise go to specified directory
-			else {
-				result = chdir(args[1]);
-			}
-			if (result == -1) fprintf(stderr, "cd: %s: No such file or directory", args[1]);
-
-		}
-
-// Command CAT
-    else if (!strcmp("cat", args[0])) {
-			pid_t  pid;// this is just a type def for int really..
-			pid = fork();
-
-			if (pid == 0) {
-        myexecvp(args, &output_redirect);
+      // Command Copy
+      else if (!strcmp("cp", args[0])) {
+        execute_with_fork(args, &bg, &output_redirect, &current_fg_job_pid);
       }
-			else {
-        if (bg == 1) {
-            addToJobList(args, pid);
-            // Implement CAT
-        } else {
-          current_fg_job_pid = pid;
-        }
-				int status;
-				waitpid(pid, &status, WUNTRACED);
-			}
-    }
 
-    else if (!strcmp("cp", args[0])) {
-			pid_t  pid;// this is just a type def for int really..
-			pid = fork();
-			if (pid == 0) {
-				myexecvp(args, &output_redirect);
+      // Command Move
+      else if (!strcmp("mv", args[0])) {
+        execute_with_fork(args, &bg, &output_redirect, &current_fg_job_pid);
       }
-			else {
-        if (bg == 1) {
-            addToJobList(args, pid);
-        } else {
-          current_fg_job_pid = pid;
-        }
-				int status;
-				waitpid(pid, &status, WUNTRACED);
-			}
-    }
 
-// Command FOREGROUND
-    else if (!strcmp("fg", args[0])) {
-      if (head_job == NULL) {
-        printf("No job is running in background.\n");
-      } else {
-        while (copy_head_job!= NULL) {
-          if (copy_head_job->number == atoi(args[1])) {
-            printf("Job number %d, PID:%d is put in foreground.\n",copy_head_job->number, copy_head_job->pid);
-            myexecvp(args, &output_redirect);
-            break;
+      //Command Remove
+      else if (!strcmp("rm", args[0])) {
+        execute_with_fork(args, &bg, &output_redirect, &current_fg_job_pid);
+      }
+
+      // Command Touch for creating files
+      else if (!strcmp("touch", args[0])) {
+        execute_with_fork(args, &bg, &output_redirect, &current_fg_job_pid);
+      }
+
+      // Command CD
+  		else if (!strcmp("cd", args[0])) {
+
+  			int result = 0;
+  			if (args[1] == NULL) { // this will fetch home directory if you just input "cd" with no arguments
+  				char *home = getenv("HOME");
+  				if (home != NULL) {
+  					result = chdir(home);
+  				}
+  				else {
+  					printf("cd: No $HOME variable declared in the environment");
+  				}
+  			}
+  			//Otherwise go to specified directory
+  			else {
+  				result = chdir(args[1]);
+  			}
+  			if (result == -1) fprintf(stderr, "cd: %s: No such file or directory", args[1]);
+
+  		}
+
+
+      // Command FOREGROUND
+      else if (!strcmp("fg", args[0])) {
+        if (head_job == NULL) {
+          printf("No job is running in background.\n");
+        } else {
+          if (args[1] != '\0') {
+            while (copy_head_job!= NULL) {
+              if (copy_head_job->number == atoi(args[1])) {
+                printf("Job number %d, PID:%d is put in foreground.\n",copy_head_job->number, copy_head_job->pid);
+                myexecvp(args, &output_redirect);
+                break;
+              }
+              copy_head_job = copy_head_job->next;
+            }
+          } else {
+            printf("%s\n","Please specify job number to bring to foreground..");
           }
-          copy_head_job = copy_head_job->next;
         }
       }
-    }
 
-// Command JOBS
-    else if (!strcmp("jobs", args[0])) {
-      if (head_job == NULL) {
-        printf("No job is running in background.\n");
-      } else {
-        while (copy_head_job != NULL) {
-          printf("[%d]  PID: %d \n",copy_head_job->number, copy_head_job->pid);
-          copy_head_job = copy_head_job->next;
+      // Command JOBS
+      else if (!strcmp("jobs", args[0])) {
+        if (head_job == NULL) {
+          printf("No job is running in background.\n");
+        } else {
+          while (copy_head_job != NULL) {
+            printf("[%d]  PID: %d \n",copy_head_job->number, copy_head_job->pid);
+            copy_head_job = copy_head_job->next;
+          }
         }
       }
-    }
 
-// Command PWD
-    else if (!strcmp("pwd", args[0])) {
-      myexecvp(args, &output_redirect);
-    }
-
-
-// Command EXIT
-    else if (!strcmp("exit", args[0])) {
-		    exit(1);
-    }
-
-// ANY OTHER COMMANDS
-    else {
-      if(execvp(args[0], args) < 0){
-        printf("No command found");
+      // Command PWD
+      else if (!strcmp("pwd", args[0])) {
+        myexecvp(args, &output_redirect);
       }
-    }
 
-    free(line);
+
+      // Command EXIT
+      else if (!strcmp("exit", args[0])) {
+  		    exit(0);
+      }
+
+      // ANY OTHER COMMANDS
+      else {
+        if(myexecvp(args, &output_redirect) < 0){
+          printf("No command found");
+        }
+      }
+
+      free(line);
+    }
 	}
 
   return 0;
