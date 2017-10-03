@@ -17,14 +17,9 @@ struct node {
 struct node *head_job = NULL;
 struct node *current_job = NULL;
 struct node *copy_head_job = NULL;
-pid_t current_fg_job_pid = NULL;
+pid_t current_fg_job_pid;
 
-//Initiliaze the args(input) to null once the command has been processed
-// this is to clear it to accept another command in the next while loop
-void initialize(char *args[]);
-
-
-int getcmd(char *line, char *args[], int *background)
+int getcmd(char *line, char *args[], int *background, int *output_redirect)
 {
 	int i = 0;
 	char *token, *loc;
@@ -34,11 +29,13 @@ int getcmd(char *line, char *args[], int *background)
 	sprintf(copyCmd, "%s", line);
 
 	// Check if background is specified..
-	if ((loc = index(line, '&')) != NULL) {
+  if ((loc = index(line, '&')) != NULL) {
 		*background = 1;
 		*loc = ' ';
-	} else
-		*background = 0;
+	} else *background = 0;
+
+  // Check if output redirection is specified..
+  if (index(line, '>') != NULL) *output_redirect=1;
 
 	//Create a new line pointer to solve the problem of memory leaking created by strsep() and getline() when making line = NULL
 	char *lineCopy = line;
@@ -83,79 +80,98 @@ void addToJobList(char *args[], int process_pid) {
 }
 
 
-void initialize(char *args[]) {
+void clean_arguments(char *args[]) {
 	for (int i = 0; i < 20; i++) {
 		args[i] = NULL;
 	}
-	return;
+}
+
+void redirect_output(char *args[]) {
+  int array_index = 0;
+  char *filename = "";
+  while (args[array_index] != '\0') {
+    if (strcmp(args[array_index++], ">") == 0) {
+      if (args[array_index] != NULL) {
+      filename = args[array_index];
+      args[array_index] = NULL;
+      args[array_index - 1] = NULL;
+      int fd = open(filename, O_CREAT | O_WRONLY, 0777 );
+
+      close(1);
+      dup(fd);
+      close(fd);
+      } else {
+        perror("filename is not provided");
+        exit(1);
+      }
+    }
+  }
+}
+
+void myexecvp(char *args[], int *output_redirect) {
+  if (output_redirect == 0) {execvp(args[0], args);}
+  else {redirect_output(args); execvp(args[0], args);}
 }
 
 // This function handles Signals
 void sighandler(int signal)
 {
-    if (signal == SIGTSTP)
-        printf("\nReceived (SIGTSTP)\n");
-    else if (signal == SIGINT)
-        printf("\nreceived (SIGINT)\n");
+    if (signal == SIGTSTP) {
+    // Ignore Ctrl+Z
+    }
+    else if (signal == SIGINT) {
         printf("Killing foreground job...\n");
-        kill(getpid(), SIGKILL);
+        kill(current_fg_job_pid, SIGKILL);
+      }
 }
 
 int main(void) {
 
-  ///// SIGNALS
-  if (signal(SIGTSTP, sighandler) == SIG_ERR)
-        printf("\nCan't catch SIGUSR1\n");
-  if (signal(SIGINT, sighandler) == SIG_ERR)
-        printf("\nCan't catch SIGINT\n");
-
-
+  //========= Signals Handling===============
+  if (signal(SIGTSTP, sighandler) == SIG_ERR) exit(1);
+  if (signal(SIGINT, sighandler) == SIG_ERR) exit(1);
 
   ////////////////////
 
 	char *args[20];
 	int bg;
-
-	char *user = getenv("USER");
-	if (user == NULL) user = "User";
-
-	char str[sizeof(char)*strlen(user) + 4];
-	sprintf(str, "\n%s>> ", user);
+  int output_redirect;
 
 	while (1) {
-		initialize(args);
-		bg = 0;
 
+    // ===== RESET VARIABLES
+		clean_arguments(args);
+    copy_head_job = head_job;
+		bg = 0;
+    output_redirect=0;
 		int length = 0;
 		char *line = NULL;
 		size_t linecap = 0; // 16 bit unsigned integer
-		sprintf(str, "\n%s>> ", user);
-		printf("%s", str);
+    //=========================
+
+		printf("%s", "$>>");
 
 		/*
 		Reads an entire line from stream, storing the address of
 		the buffer containing the text into *lineptr.  The buffer is null-
 		terminated and includes the newline character, if one was found.
-		check the linux manual for more info
 		*/
 
 
 		length = getline(&line, &linecap, stdin);
-		if (length <= 0) { //if argument is empty
-			exit(-1);
-		}
-		int cnt  = getcmd(line, args, &bg);
+
+    // If argument is empty
+		if (length <= 0) exit(-1);
+
+		int cnt  = getcmd(line, args, &bg, &output_redirect);
 
 // Command LS
 		if (!strcmp("ls", args[0])) { // returns 0 if they are equal , then we negate to make the if statment true
 
-
-			printf("You're trying to call ls \n");
-
 			pid_t  pid;// this is just a type def for int really..
 			pid = fork();
 			if (pid == 0) {
-				execvp(args[0], args);
+        myexecvp(args, &output_redirect);
       }
 			else {
         if (bg == 1) {
@@ -192,12 +208,12 @@ int main(void) {
 
 // Command CAT
     else if (!strcmp("cat", args[0])) {
-      printf("You're trying to call cat \n");
-
 			pid_t  pid;// this is just a type def for int really..
 			pid = fork();
-			if (pid == 0)
-				execvp(args[0], args);
+
+			if (pid == 0) {
+        myexecvp(args, &output_redirect);
+      }
 			else {
         if (bg == 1) {
             addToJobList(args, pid);
@@ -211,17 +227,14 @@ int main(void) {
     }
 
     else if (!strcmp("cp", args[0])) {
-      printf("You're trying to call cp \n");
-
 			pid_t  pid;// this is just a type def for int really..
 			pid = fork();
 			if (pid == 0) {
-				execvp(args[0], args);
+				myexecvp(args, &output_redirect);
       }
 			else {
         if (bg == 1) {
             addToJobList(args, pid);
-            // Implement CP
         } else {
           current_fg_job_pid = pid;
         }
@@ -233,12 +246,15 @@ int main(void) {
 // Command FOREGROUND
     else if (!strcmp("fg", args[0])) {
       if (head_job == NULL) {
-        printf("No job is running in background.");
+        printf("No job is running in background.\n");
       } else {
-        while (head_job->next != NULL) {
-          if (head_job->number == atoi(args[1])) {
-            printf("Job number %d, PID:%d is put in foreground.",head_job->number, head_job->pid);
+        while (copy_head_job!= NULL) {
+          if (copy_head_job->number == atoi(args[1])) {
+            printf("Job number %d, PID:%d is put in foreground.\n",copy_head_job->number, copy_head_job->pid);
+            myexecvp(args, &output_redirect);
+            break;
           }
+          copy_head_job = copy_head_job->next;
         }
       }
     }
@@ -246,33 +262,24 @@ int main(void) {
 // Command JOBS
     else if (!strcmp("jobs", args[0])) {
       if (head_job == NULL) {
-        printf("No job is running in background.");
+        printf("No job is running in background.\n");
       } else {
-        copy_head_job = head_job;
         while (copy_head_job != NULL) {
-          printf("[%d] , PID: %d",head_job->number, head_job->pid);
+          printf("[%d]  PID: %d \n",copy_head_job->number, copy_head_job->pid);
           copy_head_job = copy_head_job->next;
         }
       }
     }
 
-////// OTHER BUILD IN COMMANDS
-
 // Command PWD
     else if (!strcmp("pwd", args[0])) {
-      printf("%s",getcwd(NULL, (int)NULL));
+      myexecvp(args, &output_redirect);
     }
-
-// Command TIMES
-    else if (!strcmp("eval", args[0])) {
-      printf("%d",execvp(args[0], args));
-    }
-
 
 
 // Command EXIT
     else if (!strcmp("exit", args[0])) {
-		    exit(0);
+		    exit(1);
     }
 
 // ANY OTHER COMMANDS
@@ -281,7 +288,9 @@ int main(void) {
         printf("No command found");
       }
     }
+
+    free(line);
 	}
 
-
+  return 0;
 }
