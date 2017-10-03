@@ -1,0 +1,36 @@
+P1Q1.----------
+-Uniprogramming: only one program can run at a time. No concept of processes.
+Other processes have to wait for process to finish in order to get resources.
+
+-Multiprogramming: Multiple process can be present at given time. Dynamic
+resource allocation required. More complex than uniprogramming but overall higher performance.
+Only one user present.
+
+-Time sharing systems: Allows multiple users share computing resources.
+
+
+P1Q2.----------
+-Uniprogramming: Each programs waits for each other to finish. So overall completon time:
+    3 * (2msec + 10msec + 4msec) = 48msec
+    t = 48msec
+-Multiprogramming:
+  t  0  2  4  6    10  12  14  16  18  20  22  24
+     A..                ........
+        B..                     ........
+           C..                          ........
+
+Program A will finish at 16msec, B 20msec and C 24msec. So all programs will finish by 24msec.
+
+
+P1Q3.----------
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+int main()
+{
+ char *p = "A simple program output.;
+ close(1);
+ int fd = open("redirect.txt","w");
+ write(fd, p, strlen(p));
+ return 0;
+}

@@ -8,22 +8,29 @@
 #include <fcntl.h>
 #include <signal.h>
 
-// ==== NODE STRUCTURE
+/* Structure node to hold background jobs */
 struct node {
   int number;
   int pid;
   struct node *next;
 };
 
-
-// ==== GLOBAL VARIABLES
+/* Global Variables */
 struct node *head_job = NULL;
 struct node *current_job = NULL;
 struct node *copy_head_job = NULL;
 pid_t current_fg_job_pid;
 
+/*
+  Function: To get command line input of user.
 
-//
+    line: full command line entered by user.
+    args: Array of tokenized arguments list.
+    background: To specify if background is present.
+    output_redirect: To specify if output is present.
+
+  returns: Number of arguments entered in shell.
+*/
 int getcmd(char *line, char *args[], int *background, int *output_redirect)
 {
 	int i = 0;
@@ -55,8 +62,12 @@ int getcmd(char *line, char *args[], int *background, int *output_redirect)
 	return i;
 }
 
-/* Add a job to the list of jobs
- */
+/*
+   Function: Add a job to the list of  background jobs.
+
+     args: Array of tokenized arguments list.
+     process_pid: ID of process to put in background.
+*/
 void addToJobList(char *args[], int process_pid) {
 
 	struct node *job = malloc(sizeof(struct node));
@@ -84,13 +95,46 @@ void addToJobList(char *args[], int process_pid) {
 	}
 }
 
+/*
+  Function: To bring background job to foreground.
 
+    job_number: Specific job number to bring foreground.
+*/
+void foreground_job(int job_number) {
+  copy_head_job = head_job;
+  // Check if background job consists only head and it is to be foregrounded
+  if (copy_head_job->next == NULL && copy_head_job->number == job_number) {
+    head_job = NULL;
+  // Check if background job does not consist only head and it is to be foregrounded
+  } else if(copy_head_job->next != NULL && copy_head_job->number == job_number) {
+    head_job = head_job->next;
+  } else {
+    while(copy_head_job->next != NULL) {
+      if (copy_head_job->next->number == job_number) {
+        copy_head_job->next = copy_head_job->next->next;
+        break;
+      }
+      copy_head_job = copy_head_job->next;
+    }
+  }
+}
+
+/*
+  Function: To reset arguments to NULL.
+
+    args: Array of tokenized arguments list.
+*/
 void clean_arguments(char *args[]) {
 	for (int i = 0; i < 20; i++) {
 		args[i] = NULL;
 	}
 }
 
+/*
+  Function: Redirects standard output to output file.
+
+    args: Array of tokenized arguments list.
+*/
 void redirect_output(char *args[]) {
   int array_index = 0;
   char *filename = "";
@@ -113,6 +157,14 @@ void redirect_output(char *args[]) {
   }
 }
 
+/*
+  Function: Executes systems calls using execvp.
+
+    args: Array of tokenized arguments list.
+    output_redirect: Indicating if redirection is present (=1) or not (=0).
+
+    returns: less than 0 if it failes and 1 if it is successful.
+*/
 int myexecvp(char *args[], int *output_redirect) {
   int result = 0;
   if (output_redirect == 0) { result = execvp(args[0], args);}
@@ -121,6 +173,14 @@ int myexecvp(char *args[], int *output_redirect) {
   return result;
 }
 
+/*
+  Function: Executes commands that need to run in child process using fork.
+
+    args: Array of tokenized arguments list.
+    bg: Indicating if background is present (=1) or not (=0).
+    output_redirect: Indicating if redirection is present (=1) or not (=0).
+    current_fg_job_pid:  ID of process running in foreground.
+*/
 void execute_with_fork(char *args[], int *bg, int *output_redirect, int *current_fg_job_pid){
   pid_t  pid;
   pid = fork();
@@ -141,7 +201,11 @@ void execute_with_fork(char *args[], int *bg, int *output_redirect, int *current
   }
 }
 
-// This function handles Signals
+/*
+  Function: Handles external signals like Ctrl+Z and Ctrl+C.
+
+    signal: Signal code received externally..
+*/
 void sighandler(int signal)
 {
     if (signal == SIGTSTP) {
@@ -154,18 +218,18 @@ void sighandler(int signal)
 
 int main(void) {
 
-  //========= Signals Handling===============
+  /*           External Signals Handling                    */
   if (signal(SIGTSTP, sighandler) == SIG_ERR) exit(1);
   if (signal(SIGINT, sighandler) == SIG_ERR) exit(1);
 
-  ////////////////////
+
 
 	char *args[20];
 	int bg, output_redirect;
 
 	while (1) {
 
-    // ===== RESET VARIABLES
+    /*       Reset Variables      */
 		clean_arguments(args);
     copy_head_job = head_job;
 		bg = 0;
@@ -173,8 +237,8 @@ int main(void) {
 		int length = 0;
 		char *line = NULL;
 		size_t linecap = 0; // 16 bit unsigned integer
-    //=========================
 
+    /* Print Shell */
 		printf("%s", "$>>");
 
 		/*
@@ -249,15 +313,19 @@ int main(void) {
         if (head_job == NULL) {
           printf("No job is running in background.\n");
         } else {
+          int job_found = 0;
           if (args[1] != '\0') {
             while (copy_head_job!= NULL) {
               if (copy_head_job->number == atoi(args[1])) {
                 printf("Job number %d, PID:%d is put in foreground.\n",copy_head_job->number, copy_head_job->pid);
-                myexecvp(args, &output_redirect);
+                foreground_job(copy_head_job->number);
+                //myexecvp(args, &output_redirect);
+                job_found = 1;
                 break;
               }
               copy_head_job = copy_head_job->next;
             }
+            if (job_found == 0) printf("No Job found with number %d\n", atoi(args[1]));
           } else {
             printf("%s\n","Please specify job number to bring to foreground..");
           }
