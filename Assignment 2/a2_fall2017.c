@@ -1,5 +1,3 @@
-#include <semaphore.h>
-#include <pthread.h>
 #include <fcntl.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
@@ -11,6 +9,8 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <semaphore.h>
+#include <pthread.h>
 
 #define BUFF_SHM "/OS_BUFF"
 #define BUFF_MUTEX_A "/OS_MUTEX_A"
@@ -148,7 +148,10 @@ void reserve(struct reservation *all_reservations[], char name[], char *section[
     if (table_number == -1) {
       table_number = find_available_table(all_reservations,'A');
     }
-    if (all_reservations[table_number - 100] != NULL) {
+    if (table_number == 110) {
+      printf("%s\n","Section A is already full, please check section B.");
+    }
+    else if (all_reservations[table_number - 100] != NULL) {
       printf("Table number %d is already taken. Please select different table number.\n", table_number);
     }
     else {
@@ -163,8 +166,11 @@ void reserve(struct reservation *all_reservations[], char name[], char *section[
     if (table_number == -1) {
       table_number = find_available_table(all_reservations,'B');
     }
-    if (all_reservations[table_number - 190] != NULL) {
-      printf("Table number %d is already taken. Please select different table number.", table_number);
+    if (table_number == 210) {
+      printf("%s\n","Section B is already full, please check section A.");
+    }
+    else if (all_reservations[table_number - 190] != NULL) {
+      printf("Table number %d is already taken. Please select different table number.\n", table_number);
     }
     else {
       struct reservation *new_reservation = malloc(sizeof(struct reservation));
