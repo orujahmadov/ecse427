@@ -17,11 +17,9 @@
 #define BUFF_MUTEX_B "/OS_MUTEX_B"
 
 struct reservation {
-  char *name;
+  char *person_name;
   int table_number;
 };
-
-struct reservation reservations[20];
 
 //declaring semaphores names for local usage
 sem_t *mutexA;
@@ -31,17 +29,23 @@ int find_available_table(struct reservation *all_reservations[], char section) {
   int available_table;
   if (section == 'A') { // Update available table number for section A
     int available_table_A = 100;
-    for (int i=0; i < 10; i++) {
-      if (all_reservations[i]->table_number == available_table_A) {
-        available_table_A+=1;
+    for (int i = 0; i < 10; i++) {
+      if (all_reservations[i] != NULL) {
+          struct reservation r = *all_reservations[i];
+          if (r.table_number == available_table_A) {
+            available_table_A+=1;
+          }
       }
     }
     available_table = available_table_A;
   } else { // Update available table number for section B
     int available_table_B = 200;
-    for (int i=10; i < 20; i++) {
-      if (all_reservations[i]->table_number == available_table_B) {
-        available_table_B+=1;
+    for (int i = 10; i < 20; i++) {
+      if (all_reservations[i] != NULL) {
+          struct reservation r = *all_reservations[i];
+          if (r.table_number == available_table_B) {
+            available_table_B+=1;
+          }
       }
     }
     available_table = available_table_B;
@@ -55,6 +59,17 @@ char *read_line(void) {
   getline(&line, &bufsize, stdin);
 
   return line;
+}
+
+/*
+  Function: To reset arguments to NULL.
+
+    args: Array of tokenized arguments list.
+*/
+void clean_arguments(char *args[]) {
+	for (int i = 0; i < 20; i++) {
+		args[i] = NULL;
+	}
 }
 
 // /*
@@ -92,89 +107,150 @@ int getcmd(char *line, char *args[])
 void initialize(struct reservation *all_reservations[]) {
 
   // Wait for semaphore signals
-  sem_wait(mutexA);
-  sem_wait(mutexB);
+  // sem_wait(mutexA);
+  // sem_wait(mutexB);
 
   for (int i = 0; i < 20; i++) {
-		all_reservations[i]->name = NULL;
-    all_reservations[i]->table_number = 0;
+    if (all_reservations[i]) {
+      all_reservations[i] = NULL;
+    }
 	}
-
   // Signal semaphores for other processes
-  sem_signal(mutexA);
-  sem_signal(mutexB);
-
+  // sem_signal(mutexA);
+  // sem_signal(mutexB);
+  printf("%s\n","All reservations are initialized.");
 }
 
 void status(struct reservation *all_reservations[]) {
   // Wait for semaphore signals
-  sem_wait(mutexA);
-  sem_wait(mutexB);
-
+  // sem_wait(mutexA);
+  // sem_wait(mutexB);
   for (int i = 0; i < 20; i++) {
-    if (all_reservations[i]->table_number != 0) {
-      printf("Table number %d is reserved by %s\n ", all_reservations[i]->table_number, all_reservations[i]->name);
+    if (all_reservations[i] != NULL) {
+        struct reservation r = *all_reservations[i];
+        printf("Table number %d is reserved by %s\n", r.table_number, r.person_name);
     }
 	}
 
   // Signal semaphores for other processes
-  sem_signal(mutexA);
-  sem_signal(mutexB);
+  // sem_signal(mutexA);
+  // sem_signal(mutexB);
 
 }
 
-void reserve(struct reservation *all_reservations[], char *name[], char section, int table_number) {
+void reserve(struct reservation *all_reservations[], char *name[], char *section[], int table_number) {
   // Wait for semaphore signals
-  sem_wait(mutexA);
-  sem_wait(mutexB);
+  // sem_wait(mutexA);
+  // sem_wait(mutexB);
 
-  // If table number is given, reserve specific table
-  if (table_number != 0) {
-    if (section == 'A') {
-      if (all_reservations[table_number - 100]->table_number != 0) {
-        all_reservations[table_number - 100]->table_number = table_number;
-        all_reservations[table_number - 100]->name = *name;
-        printf("Table number %d is now reserved for %s\n", table_number, *name);
-      } else {
-        printf("Table number %d is already taken. Please select different table number.", table_number);
-      }
+  if (!strcmp(*section, "A")) {
+    if (table_number == -1) {
+      table_number = find_available_table(all_reservations,'A');
+    }
+    if (all_reservations[table_number - 100] != NULL) {
+      printf("Table number %d is already taken. Please select different table number.\n", table_number);
     }
     else {
-      if (all_reservations[table_number - 190]->table_number != 0) {
-        all_reservations[table_number - 190]->table_number = table_number;
-        all_reservations[table_number - 190]->name = *name;
-        printf("Table number %d is now reserved for %s\n", table_number, *name);
-      } else {
-        printf("Table number %d is already taken. Please select different table number.", table_number);
-      }
+      struct reservation *new_reservation = malloc(sizeof(struct reservation));
+      new_reservation->person_name = *name;
+      new_reservation->table_number = table_number;
+      all_reservations[table_number - 100] = new_reservation;
+      printf("Table number %d in section %s is now reserved for %s\n", table_number, *section, *name);
     }
-  } else { // Reserve first available seat
-    if (section == 'A') {
-      int available_table_A = find_available_table(NULL,'A');
-      all_reservations[available_table_A - 190]->table_number = available_table_A;
-      all_reservations[available_table_A - 190]->name = *name;
-      printf("Table number %d is now reserved for %s\n", available_table_A, *name);
-    } else {
-      int available_table_B = find_available_table(NULL,'B');
-      all_reservations[available_table_B - 190]->table_number = available_table_B;
-      all_reservations[available_table_B - 190]->name = *name;
-      printf("Table number %d is now reserved for %s\n", available_table_B, *name);
+  }
+  else {
+    if (table_number == -1) {
+      table_number = find_available_table(all_reservations,'B');
+    }
+    if (all_reservations[table_number - 190] != NULL) {
+      printf("Table number %d is already taken. Please select different table number.", table_number);
+    }
+    else {
+      struct reservation *new_reservation = malloc(sizeof(struct reservation));
+      new_reservation->person_name = *name;
+      new_reservation->table_number = table_number;
+      all_reservations[table_number - 190] = new_reservation;
+      printf("Table number %d in section %s is now reserved for %s\n", table_number, *section, *name);
     }
   }
 
   // Signal semaphores for other processes
-  sem_signal(mutexA);
-  sem_signal(mutexB);
+  // sem_signal(mutexA);
+  // sem_signal(mutexB);
 
+}
+
+int check_command(char *args[]) {
+  int flag = 0;
+  if (args[0] == NULL) {
+    flag = -1;
+    printf("%s\n","Invalid command.");
+  } else {
+    if (!strcmp("reserve", args[0])) {
+      if (args[1] == NULL) {
+        flag = -1;
+        printf("%s\n","Please enter person name.");
+      } else {
+        if (args[2] == NULL || (strcmp("A", args[2]) !=0 && strcmp("B", args[2]) !=0)) {
+          flag = -1;
+          printf("%s\n","Invalid section.");
+        } else {
+          if (args[3] != NULL) {
+            int table_number = atoi(args[3]);
+            if (!strcmp("A", args[2])) {
+              if (table_number < 100 || table_number >= 110) {
+                flag = -1;
+                printf("%s\n","Invalid table number.");
+              }
+            } else {
+              if (table_number < 200 || table_number >= 210) {
+                flag = -1;
+                printf("%s\n","Invalid table number.");
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return flag;
 }
 
 int main() {
   char *args[20];
+  struct reservation *reservations[20];
   char *line;
+  size_t linecap = 0; // 16 bit unsigned integer
+  int length = 0;
+
 	while (1) {
+    /*       Reset Variables      */
+    clean_arguments(args);
+
 		printf("%s", "$>>");
-    line = read_line();
-    getcmd(line, args);
-    //printf(args[0]);
+    length = getline(&line, &linecap, stdin);
+    int cnt = getcmd(line, args);
+    if (cnt != 0) {
+      if (check_command(args) != -1) {
+        // Command Reserve
+        if (!strcmp("reserve", args[0])) {
+          int table_number = -1;
+          if (args[3] != NULL) table_number = atoi(args[3]);
+          reserve(reservations, &args[1], &args[2], table_number);
+        }
+        // Command Initialize
+        else if (!strcmp("init", args[0])) {
+          initialize(reservations);
+        }
+        // Command Status
+        else if (!strcmp("status", args[0])) {
+          status(reservations);
+        }
+        // Command Exit
+        else if (!strcmp("exit", args[0])) {
+          exit(0);
+        }
+      }
+    }
   }
 }
