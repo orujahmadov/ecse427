@@ -15,9 +15,10 @@
 #define BUFF_SHM "/OS_BUFF"
 #define BUFF_MUTEX_A "/OS_MUTEX_A"
 #define BUFF_MUTEX_B "/OS_MUTEX_B"
+//#define MAX_NAME_SIZE 50
 
 struct reservation {
-  char *person_name;
+  char person_name[50];
   int table_number;
 };
 
@@ -138,7 +139,7 @@ void status(struct reservation *all_reservations[]) {
 
 }
 
-void reserve(struct reservation *all_reservations[], char *name[], char *section[], int table_number) {
+void reserve(struct reservation *all_reservations[], char name[], char *section[], int table_number) {
   // Wait for semaphore signals
   // sem_wait(mutexA);
   // sem_wait(mutexB);
@@ -152,10 +153,10 @@ void reserve(struct reservation *all_reservations[], char *name[], char *section
     }
     else {
       struct reservation *new_reservation = malloc(sizeof(struct reservation));
-      new_reservation->person_name = *name;
+      strcpy(new_reservation->person_name, name);
       new_reservation->table_number = table_number;
       all_reservations[table_number - 100] = new_reservation;
-      printf("Table number %d in section %s is now reserved for %s\n", table_number, *section, *name);
+      printf("Table number %d in section %s is now reserved for %s\n", table_number, *section, name);
     }
   }
   else {
@@ -167,10 +168,10 @@ void reserve(struct reservation *all_reservations[], char *name[], char *section
     }
     else {
       struct reservation *new_reservation = malloc(sizeof(struct reservation));
-      new_reservation->person_name = *name;
+      strcpy(new_reservation->person_name, name);
       new_reservation->table_number = table_number;
       all_reservations[table_number - 190] = new_reservation;
-      printf("Table number %d in section %s is now reserved for %s\n", table_number, *section, *name);
+      printf("Table number %d in section %s is now reserved for %s\n", table_number, *section, name);
     }
   }
 
@@ -236,7 +237,7 @@ int main() {
         if (!strcmp("reserve", args[0])) {
           int table_number = -1;
           if (args[3] != NULL) table_number = atoi(args[3]);
-          reserve(reservations, &args[1], &args[2], table_number);
+          reserve(reservations, args[1], &args[2], table_number);
         }
         // Command Initialize
         else if (!strcmp("init", args[0])) {
