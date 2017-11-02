@@ -1,3 +1,5 @@
+// ECSE 427 ASSINMENT 3
+// Author: Oruj Ahmadov
 #include <fcntl.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
@@ -105,11 +107,11 @@ int getcmd(char *line, char *args[])
 	return i;
 }
 
-void initialize(struct reservation *all_reservations[]) {
-
+void * initialize(void * args) {
   // Wait for semaphore signals
   // sem_wait(mutexA);
   // sem_wait(mutexB);
+  struct reservation *all_reservations[] = (struct reservation *[])args;
 
   for (int i = 0; i < 20; i++) {
     if (all_reservations[i]) {
@@ -119,23 +121,30 @@ void initialize(struct reservation *all_reservations[]) {
   // Signal semaphores for other processes
   // sem_signal(mutexA);
   // sem_signal(mutexB);
+
   printf("%s\n","All reservations are initialized.");
 }
 
-void status(struct reservation *all_reservations[]) {
+void * reservation_status(void * args) {
   // Wait for semaphore signals
   // sem_wait(mutexA);
   // sem_wait(mutexB);
+  struct reservation *all_reservations[] = (struct reservation *[])args;
+  int counter = 0;
   for (int i = 0; i < 20; i++) {
     if (all_reservations[i] != NULL) {
+      counter+=1;
         struct reservation r = *all_reservations[i];
         printf("Table number %d is reserved by %s\n", r.table_number, r.person_name);
     }
 	}
-
   // Signal semaphores for other processes
   // sem_signal(mutexA);
   // sem_signal(mutexB);
+
+  if (counter == 0) {
+    printf("%s\n","No reservations are made. All tables are empty.");
+  }
 
 }
 
@@ -145,9 +154,11 @@ void reserve(struct reservation *all_reservations[], char name[], char *section[
   // sem_wait(mutexB);
 
   if (!strcmp(*section, "A")) {
+
     if (table_number == -1) {
       table_number = find_available_table(all_reservations,'A');
     }
+
     if (table_number == 110) {
       printf("%s\n","Section A is already full, please check section B.");
     }
@@ -163,9 +174,11 @@ void reserve(struct reservation *all_reservations[], char name[], char *section[
     }
   }
   else {
+
     if (table_number == -1) {
       table_number = find_available_table(all_reservations,'B');
     }
+
     if (table_number == 210) {
       printf("%s\n","Section B is already full, please check section A.");
     }
@@ -223,41 +236,92 @@ int check_command(char *args[]) {
   return flag;
 }
 
+void execute_command(char *args[], struct reservation *reservations[]) {
+  // Thread pointers
+  pthread_t reserve_thread;
+  pthread_t init_thread;
+  pthread_t status_thread;
+
+  // Command Reserve
+  if (!strcmp("reserve", args[0])) {
+    int table_number = -1;
+    if (args[3] != NULL) table_number = atoi(args[3]);
+    reserve(reservations, args[1], &args[2], table_number);
+    //pthread_create(&reserve_thread, NULL, reserve, reservations);
+  }
+  // Command Initialize
+  else if (!strcmp("init", args[0])) {
+    pthread_create(&init_thread, NULL, initialize, reservations);
+  }
+  // Command Status
+  else if (!strcmp("status", args[0])) {
+    pthread_create(&status_thread, NULL, reservation_status, reservations);
+  }
+  // Command Exit
+  else if (!strcmp("exit", args[0])) {
+    exit(0);
+  }
+}
+
 int main() {
-  char *args[20];
+
   struct reservation *reservations[20];
-  char *line;
-  size_t linecap = 0; // 16 bit unsigned integer
-  int length = 0;
+
+  //opening the shared memory buffer ie BUFF_SHM using shm open
+  int shm_fd = shm_open(BUFF_SHM, O_CREAT | O_RDWR, 0666);
+
+  if (shm_fd == -1) {
+    printf("prod: Shared memory failed: %s\n", strerror(errno));
+    exit(1);
+  }
+
+  // if (fstat(shm_fd, reservations) == -1) {
+  //   printf("Error fstat\n");
+  // }
+
+  char *addr = nmap(NULL, sizeof(struct reservation)*20, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+
+  if (addr == MAP_FAILED) {
+    printf("%s\n","Mapping failed");
+    return -1;
+  }
+
+ //configuring the size of the shared memory to sizeof(struct table) * BUFF_SIZE usinf ftruncate
+ ftruncate(shm_fd, sizeof(struct reservation)*20);
+ memcpy(addr, reservations, sizeof(reservations));
+ sem_open( "/OS_MUTEX_A", O_CREAT, 0777, 1);
+
+ char *args[20];
+ char *line;
+ size_t linecap = 0; // 16 bit unsigned integer
 
 	while (1) {
     /*       Reset Variables      */
     clean_arguments(args);
 
 		printf("%s", "$>>");
-    length = getline(&line, &linecap, stdin);
+    getline(&line, &linecap, stdin);
     int cnt = getcmd(line, args);
     if (cnt != 0) {
       if (check_command(args) != -1) {
-        // Command Reserve
-        if (!strcmp("reserve", args[0])) {
-          int table_number = -1;
-          if (args[3] != NULL) table_number = atoi(args[3]);
-          reserve(reservations, args[1], &args[2], table_number);
-        }
-        // Command Initialize
-        else if (!strcmp("init", args[0])) {
-          initialize(reservations);
-        }
-        // Command Status
-        else if (!strcmp("status", args[0])) {
-          status(reservations);
-        }
-        // Command Exit
-        else if (!strcmp("exit", args[0])) {
-          exit(0);
+        // Read commands from file
+        if (strstr(args[0], ".txt") != NULL) {
+          FILE* file = fopen(args[0], "r"); /* should check the result */
+          char line[256];
+
+          while (fgets(line, sizeof(line), file)) {
+              getcmd(line, args);
+              execute_command(args, reservations);
+          }
+
+          fclose(file);
+        } else {
+          execute_command(args, reservations);
         }
       }
     }
   }
+
+  close(shm_fd);
+  return 0;
 }
