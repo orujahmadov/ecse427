@@ -1,5 +1,3 @@
-// ECSE 427 ASSINMENT 3
-// Author: Oruj Ahmadov
 #include <fcntl.h>
 #include <sys/shm.h>
 #include <sys/stat.h>
@@ -14,46 +12,47 @@
 #include <semaphore.h>
 #include <pthread.h>
 
+#define RESERV_SIZE 20
 #define BUFF_SHM "/OS_BUFF"
-#define BUFF_MUTEX_A "/OS_MUTEX_A"
-#define BUFF_MUTEX_B "/OS_MUTEX_B"
-//#define MAX_NAME_SIZE 50
+#define BUFF_MUTEX_1 "/OS_MUTEX_1"
+#define BUFF_MUTEX_2 "/OS_MUTEX_2"
 
 struct reservation {
-  char person_name[50];
+  char person_name[20];
   int table_number;
 };
 
 //declaring semaphores names for local usage
-sem_t *mutexA;
-sem_t *mutexB;
+sem_t *mutex1;
+sem_t *mutex2;
 
-int find_available_table(struct reservation *all_reservations[], char section) {
+int find_available_table(struct reservation *all_reservations, char section) {
   int available_table;
   if (section == 'A') { // Update available table number for section A
     int available_table_A = 100;
     for (int i = 0; i < 10; i++) {
-      if (all_reservations[i] != NULL) {
-          struct reservation r = *all_reservations[i];
-          if (r.table_number == available_table_A) {
+      if (strcmp((all_reservations+i)->person_name, "\0")) {
+          if ((all_reservations+i)->table_number == available_table_A) {
             available_table_A+=1;
           }
       }
     }
     available_table = available_table_A;
+
   } else { // Update available table number for section B
     int available_table_B = 200;
     for (int i = 10; i < 20; i++) {
-      if (all_reservations[i] != NULL) {
-          struct reservation r = *all_reservations[i];
-          if (r.table_number == available_table_B) {
+      if (strcmp((all_reservations+i)->person_name, "\0")) {
+          if ((all_reservations+i)->table_number == available_table_B) {
             available_table_B+=1;
           }
       }
     }
     available_table = available_table_B;
   }
+
   return available_table;
+
 }
 
 char *read_line(void) {
@@ -107,98 +106,110 @@ int getcmd(char *line, char *args[])
 	return i;
 }
 
-void * initialize(void * args) {
-  // Wait for semaphore signals
-  // sem_wait(mutexA);
-  // sem_wait(mutexB);
-  struct reservation *all_reservations[] = (struct reservation *[])args;
+void initialize(struct reservation *all_reservations) {
 
+  // Wait for semaphore signals
+  sem_wait(mutex1);
+  sem_wait(mutex2);
+
+  // Enter critical section
   for (int i = 0; i < 20; i++) {
-    if (all_reservations[i]) {
-      all_reservations[i] = NULL;
-    }
+    strcpy((all_reservations + i)->person_name, "\0");
 	}
+
   // Signal semaphores for other processes
-  // sem_signal(mutexA);
-  // sem_signal(mutexB);
+  sem_post(mutex1);
+  sem_post(mutex2);
 
   printf("%s\n","All reservations are initialized.");
 }
 
-void * reservation_status(void * args) {
+void status(struct reservation *all_reservations) {
+
   // Wait for semaphore signals
-  // sem_wait(mutexA);
-  // sem_wait(mutexB);
-  struct reservation *all_reservations[] = (struct reservation *[])args;
-  int counter = 0;
+  sem_wait(mutex1);
+  sem_wait(mutex2);
+
+  // Enter critical section
   for (int i = 0; i < 20; i++) {
-    if (all_reservations[i] != NULL) {
-      counter+=1;
-        struct reservation r = *all_reservations[i];
-        printf("Table number %d is reserved by %s\n", r.table_number, r.person_name);
+    if (strcmp((all_reservations + i)->person_name, "\0")) {
+        printf("Table number %d is reserved by %s\n", (all_reservations+i)->table_number, (all_reservations+i)->person_name);
     }
 	}
-  // Signal semaphores for other processes
-  // sem_signal(mutexA);
-  // sem_signal(mutexB);
 
-  if (counter == 0) {
-    printf("%s\n","No reservations are made. All tables are empty.");
-  }
+  // Signal semaphores for other processes
+  sem_post(mutex1);
+  sem_post(mutex2);
 
 }
 
-void reserve(struct reservation *all_reservations[], char name[], char *section[], int table_number) {
+void reserve(struct reservation *all_reservations, char name[], char *section[], int table_number) {
+
   // Wait for semaphore signals
-  // sem_wait(mutexA);
-  // sem_wait(mutexB);
+  sem_wait(mutex1);
+  sem_wait(mutex2);
 
+  // Enter critical section
   if (!strcmp(*section, "A")) {
-
     if (table_number == -1) {
       table_number = find_available_table(all_reservations,'A');
     }
-
     if (table_number == 110) {
       printf("%s\n","Section A is already full, please check section B.");
     }
-    else if (all_reservations[table_number - 100] != NULL) {
+    else if (strcmp((all_reservations + table_number - 100)->person_name, "\0")) {
       printf("Table number %d is already taken. Please select different table number.\n", table_number);
     }
     else {
-      struct reservation *new_reservation = malloc(sizeof(struct reservation));
-      strcpy(new_reservation->person_name, name);
-      new_reservation->table_number = table_number;
-      all_reservations[table_number - 100] = new_reservation;
+      (all_reservations+table_number-100)->table_number = table_number;
+      strcpy((all_reservations+table_number-100)->person_name, name);
       printf("Table number %d in section %s is now reserved for %s\n", table_number, *section, name);
     }
   }
   else {
-
     if (table_number == -1) {
       table_number = find_available_table(all_reservations,'B');
     }
-
     if (table_number == 210) {
       printf("%s\n","Section B is already full, please check section A.");
     }
-    else if (all_reservations[table_number - 190] != NULL) {
+    else if (strcmp((all_reservations + table_number -190)->person_name, "\0")) {
       printf("Table number %d is already taken. Please select different table number.\n", table_number);
     }
     else {
-      struct reservation *new_reservation = malloc(sizeof(struct reservation));
-      strcpy(new_reservation->person_name, name);
-      new_reservation->table_number = table_number;
-      all_reservations[table_number - 190] = new_reservation;
+      (all_reservations + table_number - 190)->table_number = table_number;
+      strcpy((all_reservations + table_number - 190)->person_name, name);
       printf("Table number %d in section %s is now reserved for %s\n", table_number, *section, name);
     }
   }
 
   // Signal semaphores for other processes
-  // sem_signal(mutexA);
-  // sem_signal(mutexB);
+  sem_post(mutex1);
+  sem_post(mutex2);
 
 }
+
+void execute_command(char *args[], struct reservation *reservations) {
+  // Command Reserve
+  if (!strcmp("reserve", args[0])) {
+    int table_number = -1;
+    if (args[3] != NULL) table_number = atoi(args[3]);
+    reserve(reservations, args[1], &args[2], table_number);
+  }
+  // Command Initialize
+  else if (!strcmp("init", args[0])) {
+    initialize(reservations);
+  }
+  // Command Status
+  else if (!strcmp("status", args[0])) {
+    status(reservations);
+  }
+  // Command Exit
+  else if (!strcmp("exit", args[0])) {
+    exit(0);
+  }
+}
+
 
 int check_command(char *args[]) {
   int flag = 0;
@@ -236,92 +247,84 @@ int check_command(char *args[]) {
   return flag;
 }
 
-void execute_command(char *args[], struct reservation *reservations[]) {
-  // Thread pointers
-  pthread_t reserve_thread;
-  pthread_t init_thread;
-  pthread_t status_thread;
-
-  // Command Reserve
-  if (!strcmp("reserve", args[0])) {
-    int table_number = -1;
-    if (args[3] != NULL) table_number = atoi(args[3]);
-    reserve(reservations, args[1], &args[2], table_number);
-    //pthread_create(&reserve_thread, NULL, reserve, reservations);
-  }
-  // Command Initialize
-  else if (!strcmp("init", args[0])) {
-    pthread_create(&init_thread, NULL, initialize, reservations);
-  }
-  // Command Status
-  else if (!strcmp("status", args[0])) {
-    pthread_create(&status_thread, NULL, reservation_status, reservations);
-  }
-  // Command Exit
-  else if (!strcmp("exit", args[0])) {
-    exit(0);
-  }
-}
-
 int main() {
 
-  struct reservation *reservations[20];
+  //open mutex BUFF_MUTEX_A and BUFF_MUTEX_B with inital value 1 using sem_open
+  mutex1 = sem_open(BUFF_MUTEX_1, O_CREAT, 0777, 1);
+  mutex2 = sem_open(BUFF_MUTEX_2, O_CREAT, 0777, 1);
+
+  if(mutex1 == (void *)-1) {
+      printf("sem_open() failed");
+      exit(1);
+  }
+
+  if(mutex2 == (void *)-1) {
+      printf("sem_open() failed");
+      exit(1);
+  }
 
   //opening the shared memory buffer ie BUFF_SHM using shm open
-  int shm_fd = shm_open(BUFF_SHM, O_CREAT | O_RDWR, 0666);
-
-  if (shm_fd == -1) {
-    printf("prod: Shared memory failed: %s\n", strerror(errno));
-    exit(1);
+  int shm_fd = shm_open(BUFF_SHM, O_RDWR | O_CREAT, 0666);
+  if (shm_fd == -1)
+  {
+      printf("prod: Shared memory failed: %s\n", strerror(errno));
+      exit(1);
   }
 
-  // if (fstat(shm_fd, reservations) == -1) {
-  //   printf("Error fstat\n");
-  // }
+  //configuring the size of the shared memory to sizeof(struct table) * BUFF_SIZE usinf ftruncate
+  ftruncate(shm_fd, sizeof(struct reservation) * RESERV_SIZE);
 
-  char *addr = nmap(NULL, sizeof(struct reservation)*20, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+  //map this shared memory to kernel space
+  void *base = mmap(NULL, sizeof(struct reservation) * RESERV_SIZE, PROT_WRITE | PROT_READ, MAP_SHARED, shm_fd, 0);
 
-  if (addr == MAP_FAILED) {
-    printf("%s\n","Mapping failed");
-    return -1;
+  if (base == MAP_FAILED)
+  {
+      printf("prod: Map failed: %s\n", strerror(errno));
+      // close and shm_unlink?
+      exit(1);
   }
 
- //configuring the size of the shared memory to sizeof(struct table) * BUFF_SIZE usinf ftruncate
- ftruncate(shm_fd, sizeof(struct reservation)*20);
- memcpy(addr, reservations, sizeof(reservations));
- sem_open( "/OS_MUTEX_A", O_CREAT, 0777, 1);
-
- char *args[20];
- char *line;
- size_t linecap = 0; // 16 bit unsigned integer
+  char *args[20];
+  char *line;
+  size_t linecap = 0; // 16 bit unsigned integer
+  int length = 0;
 
 	while (1) {
     /*       Reset Variables      */
     clean_arguments(args);
 
 		printf("%s", "$>>");
-    getline(&line, &linecap, stdin);
+    length = getline(&line, &linecap, stdin);
     int cnt = getcmd(line, args);
+
     if (cnt != 0) {
       if (check_command(args) != -1) {
-        // Read commands from file
-        if (strstr(args[0], ".txt") != NULL) {
-          FILE* file = fopen(args[0], "r"); /* should check the result */
-          char line[256];
+          // Read commands from file
+         if (strstr(args[0], ".txt") != NULL) {
+           FILE* file = fopen(args[0], "r"); /* should check the result */
+           char line[256];
 
-          while (fgets(line, sizeof(line), file)) {
-              getcmd(line, args);
-              execute_command(args, reservations);
+           while (fgets(line, sizeof(line), file)) {
+               getcmd(line, args);
+               execute_command(args, base);
+           }
+
+           fclose(file);
+         } else {
+           execute_command(args, base);
           }
-
-          fclose(file);
-        } else {
-          execute_command(args, reservations);
-        }
       }
     }
+
   }
 
+  //close the semphores
+  sem_close(mutex1);
+  sem_close(mutex2);
+
+  //unmap the shared memory
+  munmap(base, sizeof(struct reservation)*RESERV_SIZE);
   close(shm_fd);
+
   return 0;
 }
