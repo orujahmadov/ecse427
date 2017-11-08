@@ -1,0 +1,13 @@
+reserve test2 A
+reserve test2 A 108
+reserve test2 A
+status
+reserve test2 B
+reserve test2 B 203
+reserve test2 B
+reserve test2 B 204
+reserve test2 B 203
+reserve test2 A 100
+status
+reserve test2 B
+status

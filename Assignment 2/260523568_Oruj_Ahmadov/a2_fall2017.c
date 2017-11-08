@@ -14,8 +14,8 @@
 
 #define RESERV_SIZE 20
 #define BUFF_SHM "/OS_BUFF"
-#define BUFF_MUTEX_1 "/OS_MUTEX_1"
-#define BUFF_MUTEX_2 "/OS_MUTEX_2"
+#define BUFF_MUTEX_A "/OS_MUTEX_A"
+#define BUFF_MUTEX_B "/OS_MUTEX_A"
 
 struct reservation {
   char person_name[20];
@@ -23,8 +23,8 @@ struct reservation {
 };
 
 //declaring semaphores names for local usage
-sem_t *mutex1;
-sem_t *mutex2;
+sem_t *mutexA;
+sem_t *mutexB;
 
 int find_available_table(struct reservation *all_reservations, char section) {
   int available_table;
@@ -109,8 +109,8 @@ int getcmd(char *line, char *args[])
 void initialize(struct reservation *all_reservations) {
 
   // Wait for semaphore signals
-  sem_wait(mutex1);
-  sem_wait(mutex2);
+  sem_wait(mutexA);
+  sem_wait(mutexB);
 
   // Enter critical section
   for (int i = 0; i < 20; i++) {
@@ -118,8 +118,8 @@ void initialize(struct reservation *all_reservations) {
 	}
 
   // Signal semaphores for other processes
-  sem_post(mutex1);
-  sem_post(mutex2);
+  sem_post(mutexA);
+  sem_post(mutexB);
 
   printf("%s\n","All reservations are initialized.");
 }
@@ -127,8 +127,8 @@ void initialize(struct reservation *all_reservations) {
 void status(struct reservation *all_reservations) {
 
   // Wait for semaphore signals
-  sem_wait(mutex1);
-  sem_wait(mutex2);
+  sem_wait(mutexA);
+  sem_wait(mutexB);
 
   // Enter critical section
   for (int i = 0; i < 20; i++) {
@@ -138,16 +138,16 @@ void status(struct reservation *all_reservations) {
 	}
 
   // Signal semaphores for other processes
-  sem_post(mutex1);
-  sem_post(mutex2);
+  sem_post(mutexA);
+  sem_post(mutexB);
 
 }
 
 void reserve(struct reservation *all_reservations, char name[], char *section[], int table_number) {
 
   // Wait for semaphore signals
-  sem_wait(mutex1);
-  sem_wait(mutex2);
+  sem_wait(mutexA);
+  sem_wait(mutexB);
 
   // Enter critical section
   if (!strcmp(*section, "A")) {
@@ -184,8 +184,8 @@ void reserve(struct reservation *all_reservations, char name[], char *section[],
   }
 
   // Signal semaphores for other processes
-  sem_post(mutex1);
-  sem_post(mutex2);
+  sem_post(mutexA);
+  sem_post(mutexB);
 
 }
 
@@ -250,19 +250,19 @@ int check_command(char *args[]) {
 int main() {
 
   //open mutex BUFF_MUTEX_A and BUFF_MUTEX_B with inital value 1 using sem_open
-  mutex1 = sem_open(BUFF_MUTEX_1, O_CREAT, 0777, 1);
-  mutex2 = sem_open(BUFF_MUTEX_2, O_CREAT, 0777, 1);
-
-  if(mutex1 == (void *)-1) {
+  mutexA = sem_open(BUFF_MUTEX_A, O_CREAT, 0777, 1);
+  mutexB = sem_open(BUFF_MUTEX_B, O_CREAT, 0777, 1);
+  if(mutexA == (void *)-1) {
       printf("sem_open() failed");
       exit(1);
   }
 
-  if(mutex2 == (void *)-1) {
+  if(mutexB == (void *)-1) {
       printf("sem_open() failed");
       exit(1);
   }
-
+  // sem_post(mutexA);
+  // sem_post(mutexB);
   //opening the shared memory buffer ie BUFF_SHM using shm open
   int shm_fd = shm_open(BUFF_SHM, O_RDWR | O_CREAT, 0666);
   if (shm_fd == -1)
@@ -307,6 +307,7 @@ int main() {
            while (fgets(line, sizeof(line), file)) {
                getcmd(line, args);
                execute_command(args, base);
+               clean_arguments(args);
            }
 
            fclose(file);
@@ -319,8 +320,8 @@ int main() {
   }
 
   //close the semphores
-  sem_close(mutex1);
-  sem_close(mutex2);
+  sem_close(mutexA);
+  sem_close(mutexB);
 
   //unmap the shared memory
   munmap(base, sizeof(struct reservation)*RESERV_SIZE);
