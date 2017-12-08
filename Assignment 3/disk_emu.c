@@ -128,6 +128,8 @@ int read_blocks(int start_address, int nblocks, void *buffer)
     }
 
     free(blockRead);
+
+
     /*If no failure return the number of blocks read, else return the negative number of failures*/
     if (e == 0)
         return s;
