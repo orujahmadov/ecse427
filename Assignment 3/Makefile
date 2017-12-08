@@ -1,26 +1,15 @@
-CFLAGS = -c -g -Wall -std=gnu99 `pkg-config fuse --cflags --libs`
+# To compile with test1, make test1
+# To compile with test2, make test2
+CC = clang -g -Wall
+EXECUTABLE=sfs
 
-LDFLAGS = `pkg-config fuse --cflags --libs`
+SOURCES_TEST1= disk_emu.c sfs_api.c sfs_test1.c tests.c
+SOURCES_TEST2= disk_emu.c sfs_api.c sfs_test2.c tests.c
 
-# Uncomment on of the following three lines to compile
-SOURCES= disk_emu.c sfs_api.c sfs_test.c sfs_api.h
-#SOURCES= disk_emu.c sfs_api.c sfs_test2.c sfs_api.h
-#SOURCES= disk_emu.c sfs_api.c fuse_wrappers.c sfs_api.h
+test1: $(SOURCES_TEST1) 
+	$(CC) -o $(EXECUTABLE) $(SOURCES_TEST1)
 
-#if you wish to create your own test - you can do it using this
-#SOURCES= disk_emu.c sfs_api.c sfs_mytest.c sfs_api.h
-
-
-OBJECTS=$(SOURCES:.c=.o)
-EXECUTABLE= ID_LASTNAME_FIRSTNAME
-
-all: $(SOURCES) $(HEADERS) $(EXECUTABLE)
-
-$(EXECUTABLE): $(OBJECTS)
-	gcc $(OBJECTS) $(LDFLAGS) -o $@
-
-.c.o:
-	gcc $(CFLAGS) $< -o $@
-
+test2: $(SOURCES_TEST2)
+	$(CC) -o $(EXECUTABLE) $(SOURCES_TEST2)
 clean:
-	rm -rf *.o *~ $(EXECUTABLE)
+	rm $(EXECUTABLE)

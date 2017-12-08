@@ -1,55 +1,91 @@
-#ifndef _INCLUDE_SFS_API_H_
-#define _INCLUDE_SFS_API_H_
+#include "disk_emu.h"
 
-#include <stdint.h>
+// size of components
+#define blockSize 1024
+#define sizeOfPointer 4
+// might modified numberOf blocks 
+#define numberOfBlocks 1024
+#define numberOfInodes 200
+#define sizeOfInode 64
+#define sizeOfSuperBlockField 4
 
-#define MAX_FILE_NAME 20
-#define MAX_EXTENSION_NAME 3
+#define numberOfEntries 64
+ 
+#define myFileName "WDDNguyen"
 
-typedef struct superblock_t{
-    uint64_t magic;
-    uint64_t block_size;
-    uint64_t fs_size;
-    uint64_t inode_table_len;
-    uint64_t root_dir_inode;
-} superblock_t;
+// non standard inode 
+// size field  total number of bytes 
+// no need to know about indirect 
+// these block contains data
 
-typedef struct inode_t {
-    unsigned int mode;
-    unsigned int link_cnt;
-    unsigned int uid;
-    unsigned int gid;
-    unsigned int size;
-    unsigned int data_ptrs[12];
-    unsigned int indirectPointer; // points to a data block that points to other data blocks (Single indirect)
+//File has lots of inodes 
+// for j node   size = size of the file 
+// set size = -1 to be blank
+
+
+typedef struct {
+	int size; 
+	int direct[14];
+	int indirect;
 } inode_t;
 
-/*
- * inodeIndex    which inode this entry describes
- * inode  pointer towards the inode in the inode table
- *rwptr    where in the file to start   
- */
-typedef struct file_descriptor {
-    uint64_t inodeIndex;
-    inode_t* inode; // 
-    uint64_t rwptr;
-} file_descriptor;
+
+typedef struct {
+	inode_t inodeSlot[16];
+} inodeBlock_t;
+
+// root is a jnode
+// have to add shadow jnode later
+// need to fill to get to 1024 or  copy memory to block_t then pass that to the disk * calloc
+
+typedef struct {
+	
+unsigned char magic[4];
+
+int block_size;
+int fs_size;
+int Inodes;
+inode_t root;
+inode_t shadow[4];
+int lastShadow;
+int rootDirectoryBlockNumber[4]; 
+//filling up the super block with empty value
+char fill[668];
+} superblock_t;
 
 
-typedef struct directory_entry{
-    int num; // represents the inode number of the entery. 
-    char name[MAX_FILE_NAME]; // represents the name of the entery. 
-}directory_entry;
+// can use uint8_t 
+typedef struct{
+	unsigned char bytes[blockSize];
+}block_t;
+
+typedef struct {
+    int free;
+    int inode;
+    int rwptr;
+	int readptr;
+} fileDescriptor_t;
+ 
+typedef struct {
+    char name[10];
+    int inodeIndex;
+} directoryEntry_t;
+
+typedef struct{
+	directoryEntry_t entries[64];
+} rootDirectory_t;
+
+void mkssfs(int fresh);
+int ssfs_fopen(char *name);
+int ssfs_fclose(int fileID);
+int ssfs_frseek(int fileID, int loc);
+int ssfs_fwseek(int fileID, int loc);
+int ssfs_fwrite(int fileID, char *buf, int length);
+int ssfs_fread(int fileID, char *buf, int length);
+int ssfs_remove(char *file);
+/*int ssfs_commit();
+int ssfs_restore(int cnum);
+*/
 
 
-void mksfs(int fresh);
-int sfs_getnextfilename(char *fname);
-int sfs_getfilesize(const char* path);
-int sfs_fopen(char *name);
-int sfs_fclose(int fileID);
-int sfs_fread(int fileID, char *buf, int length);
-int sfs_fwrite(int fileID, const char *buf, int length);
-int sfs_fseek(int fileID, int loc);
-int sfs_remove(char *file);
 
-#endif //_INCLUDE_SFS_API_H_
