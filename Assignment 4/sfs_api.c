@@ -6,8 +6,8 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#define MAX_NUM_BLOCKS 530 // 18 is for super block to start of datablock.
-#define BLOCK_SIZE 512
+#define MAX_NUM_BLOCKS 1024
+#define BLOCK_SIZE 1024
 #define MAX_INODES 100
 #define MAX_OPEN_FILES 90
 #define DIRECT_POINTERS 12
@@ -96,7 +96,7 @@ void mksfs(int fresh) {
 	}
 
 	if (fresh == 1) {
-		init_fresh_disk(AHMADOV_ORUJ, BLOCK_SIZE, 18 + 512);
+		init_fresh_disk(AHMADOV_ORUJ, BLOCK_SIZE, MAX_NUM_BLOCKS);
 
 		init_super_block();
 
@@ -121,7 +121,7 @@ void mksfs(int fresh) {
 
 	}
 	else {
-		init_disk(AHMADOV_ORUJ, BLOCK_SIZE, 18 + 512);
+		init_disk(AHMADOV_ORUJ, BLOCK_SIZE, MAX_NUM_BLOCKS);
 		fd_table[ROOT_FD].status = IS_USED;
 		fd_table[ROOT_FD].inode_number = ROOT_DIRECTORY_INODE;
 		fd_table[ROOT_FD].inode = get_inode(fd_table[ROOT_FD].inode_number);
@@ -443,7 +443,7 @@ void init_open_file_desc_table()
 int get_free_data_block()
 {
 	char free_bitmap[BLOCK_SIZE];
-	read_blocks(2, 1, free_bitmap); 
+	read_blocks(2, 1, free_bitmap);
 
 	int i;
 	for (i = 0; i < BLOCK_SIZE; i++)
@@ -452,7 +452,7 @@ int get_free_data_block()
 		{
 			free_bitmap[i] = IS_USED;
 			write_blocks(2, 1, free_bitmap); // update free block bitmap
-			return i + 18; // returns index of free data block. add 18 to it because 18 is start of data blocks
+			return i + 18;
 		}
 	}
 	return -1; // no free data blocks left
@@ -480,7 +480,7 @@ void write_inode_to_disk(int inode_number, inode_t *inode)
 	char buffer[BLOCK_SIZE];
 
 	// Figuring out where the inode should go and which block number inode will belong to
-	int numberOfInodesPerBlock = 512/sizeof(inode_t); // comes out to be 7 inodes per block on disk
+	int numberOfInodesPerBlock = BLOCK_SIZE/sizeof(inode_t);
 	int blockNumber = inode_number/numberOfInodesPerBlock;
 	int inodeIndex = inode_number % numberOfInodesPerBlock;
 
@@ -503,7 +503,7 @@ inode_t * get_inode(int inode_number)
 	char buffer[BLOCK_SIZE];
 
 	// Figuring out where the inode should go and which block number inode will belong to
-	int numberOfInodesPerBlock = 512/sizeof(inode_t); // comes out to be 7 inodes per block on disk
+	int numberOfInodesPerBlock = BLOCK_SIZE/sizeof(inode_t);
 	int blockNumber = inode_number/numberOfInodesPerBlock;
 	int inodeIndex = inode_number % numberOfInodesPerBlock;
 
@@ -697,7 +697,7 @@ void free_indirect_pointer(block_pointer_t *pointers)
 			write_blocks(2, 1, free_bitmap);
 			return;
 		}
-		block_index = block_index - 18; // 18 for index of data block on disk
+		block_index = block_index - 18;
 		free_bitmap[block_index] = IS_FREE;
 	}
 }
